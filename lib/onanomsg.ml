@@ -80,20 +80,24 @@ let raise_if cond f =
 let raise_negative = raise_if (fun x -> x < 0)
 let raise_notequal v = raise_if (fun x -> x <> v)
 
-type socket = int
-type domain = AF_SP [@value 1] | AF_SP_RAW [@@deriving enum]
-type proto =
-  | Pair [@value 16]
-  | Pub [@value 32]
-  | Sub [@value 33]
-  | Req [@value 48]
-  | Rep [@value 49]
-  | Push [@value 80]
-  | Pull [@value 81]
-  | Surveyor [@value 96]
-  | Respondant [@value 97]
-  | Bus [@value 112]
-      [@@deriving enum]
+type ('d, 'p) socket = int
+type d = [`AF_SP [@value 1] | `AF_SP_RAW] [@@deriving enum]
+
+type p = [
+  | `Pair [@value 16]
+  | `Pub [@value 32]
+  | `Sub [@value 33]
+  | `Req [@value 48]
+  | `Rep [@value 49]
+  | `Push [@value 80]
+  | `Pull [@value 81]
+  | `Surveyor [@value 96]
+  | `Respondant [@value 97]
+  | `Bus [@value 112]
+] [@@deriving enum]
+
+type p_snd = [`Pair | `Pub | `Req | `Rep | `Push | `Surveyor | `Respondant | `Bus]
+type p_rcv = [`Pair | `Sub | `Req | `Rep | `Pull | `Surveyor | `Respondant | `Bus]
 
 type addr = [`Inproc of string | `Ipc of string | `Tcp of Ipaddr.t * int]
 
@@ -121,9 +125,9 @@ let addr_of_string s =
 
 type eid = int
 
-let socket ~domain ~proto =
+let socket domain proto =
   raise_negative (fun () ->
-      nn_socket (domain_to_enum domain) (proto_to_enum proto))
+      nn_socket (d_to_enum domain) (p_to_enum proto))
 
 let bind sock addr =
   raise_negative (fun () -> nn_bind sock @@ string_of_addr addr)
@@ -156,11 +160,11 @@ let getsockopt_int = getsockopt ~typ:Ctypes.int ~init:0
 
 let domain sock =
   getsockopt_int sock "NN_SOL_SOCKET" "NN_DOMAIN" |>
-  domain_of_enum |> Opt.run
+  d_of_enum |> Opt.run
 
 let proto sock =
   getsockopt_int sock "NN_SOL_SOCKET" "NN_PROTOCOL" |>
-  proto_of_enum |> Opt.run
+  p_of_enum |> Opt.run
 
 let get_linger sock =
   getsockopt_int sock "NN_SOL_SOCKET" "NN_LINGER" |> function
