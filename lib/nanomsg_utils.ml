@@ -60,7 +60,7 @@ let error () =
   let err_value =
     if code > 156384712
     then Symbol.errvalue_of_errno_exn code
-    else "" in
+    else string_of_int code in
   `Error (err_value, err_string)
 
 let maybe_error cond f =
