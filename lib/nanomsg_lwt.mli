@@ -1,7 +1,5 @@
 open Nanomsg
 
-exception Error of string * string
-
 val wrap_error : ('a, error) CCError.t -> 'a Lwt.t
 val bind_error : ('a -> 'b Lwt.t) -> ('a, error) CCError.t -> 'b Lwt.t
 val map_error : ('a -> 'b) -> ('a, error) CCError.t -> 'b Lwt.t

@@ -6,15 +6,15 @@ open Nanomsg
 exception Error of string * string
 
 let wrap_error = function
-  | `Error (name, descr) -> Lwt.fail (Error (name, descr))
+  | `Error (name, descr) -> Lwt.fail @@ Error (name, descr)
   | `Ok a -> Lwt.return a
 
 let bind_error f = function
-  | `Error (name, descr) -> Lwt.fail (Error (name, descr))
+  | `Error (name, descr) -> Lwt.fail @@ Error (name, descr)
   | `Ok a -> f a
 
 let map_error f = function
-  | `Error (name, descr) -> Lwt.fail (Error (name, descr))
+  | `Error (name, descr) -> Lwt.fail @@ Error (name, descr)
   | `Ok a -> Lwt.return (f a)
 
 let throw () =
@@ -24,9 +24,9 @@ let throw () =
     if code > 156384712
     then Symbol.errvalue_of_errno_exn code
     else "" in
-  Lwt.fail (Error (err_value, err_string))
+  Lwt.fail @@ Error (err_value, err_string)
 
-let fail_if sock io_event cond f =
+let fail_if cond sock io_event f =
     bind_error
       (fun fd ->
          Lwt_unix.(wrap_syscall io_event (of_unix_file_descr fd) f) >>= fun res ->
@@ -37,13 +37,12 @@ let fail_if sock io_event cond f =
        | Lwt_unix.Read -> recv_fd sock
       )
 
-
-let fail_negative sock io_event f = fail_if sock io_event (fun x -> x < 0) f
-let fail_notequal sock io_event v f = fail_if sock io_event (fun x -> x <> v) f
+let fail_negative = fail_if (fun x -> x < 0)
+let fail_notequal v = fail_if (fun x -> x <> v)
 
 let send_buf blitf lenf sock buf pos len =
   if pos < 0 || len < 0 || pos + len > lenf buf
-  then Lwt.fail (Error ("Internal", "bounds"))
+  then Lwt.fail @@ Error ("Internal", "bounds")
   else
     let nn_buf = C.nn_allocmsg (Unsigned.Size_t.of_int len) 0 in
     match nn_buf with
@@ -53,7 +52,7 @@ let send_buf blitf lenf sock buf pos len =
       let ba = Ctypes.(bigarray_of_ptr array1 len
                          Bigarray.char @@ from_voidp char nn_buf) in
       blitf buf pos ba 0 len;
-      fail_notequal sock Lwt_unix.Write len
+      fail_notequal len sock Lwt_unix.Write
         (fun () -> C.nn_send (Obj.magic sock : int)
             nn_buf_p (Unsigned.Size_t.of_int (-1))
             Symbol.(value_of_name_exn "NN_DONTWAIT")) >|= fun nb_written ->

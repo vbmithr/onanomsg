@@ -56,7 +56,15 @@ Executable "suite"
   Install:          false
   Path:             lib_test
   MainIs:           suite.ml
-  BuildDepends:     nanomsg.lwt, oUnit (>= 2.0)
+  BuildDepends:     nanomsg.lwt, alcotest
+  CompiledObject:   best
+
+Executable "suite_async"
+  Build$:           flag(tests) && flag(async)
+  Install:          false
+  Path:             lib_test
+  MainIs:           suite_async.ml
+  BuildDepends:     nanomsg.async, alcotest
   CompiledObject:   best
 
 Test "nanomsg"
