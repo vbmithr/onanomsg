@@ -34,15 +34,10 @@ type eid
 (** {1 Socket management } *)
 type error = string * string
 val socket : ?domain:domain -> proto -> (socket, error) CCError.t
-val socket_exn : ?domain:domain -> proto -> socket
 val bind : socket -> Addr.bind Addr.t -> (eid, error) CCError.t
-val bind_exn : socket -> Addr.bind Addr.t -> eid
 val connect : socket -> Addr.connect Addr.t -> (eid, error) CCError.t
-val connect_exn : socket -> Addr.connect Addr.t -> eid
 val shutdown : socket -> eid -> (unit, error) CCError.t
-val shutdown_exn : socket -> eid -> unit
 val close : socket -> (unit, error) CCError.t
-val close_exn : socket -> unit
 
 (** {1 I/O } *)
 

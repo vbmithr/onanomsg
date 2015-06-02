@@ -127,31 +127,19 @@ let socket ?(domain=AF_SP) proto =
   error_if_negative (fun () ->
       C.nn_socket (domain_to_enum domain) (proto_to_enum proto))
 
-let socket_exn ?(domain=AF_SP) proto =
-  socket ~domain proto |> CCError.get_exn
-
 let bind sock addr =
   error_if_negative (fun () -> C.nn_bind sock @@ Addr.bind_to_string addr)
 
-let bind_exn sock addr =
-  bind sock addr |> CCError.get_exn
-
 let connect sock addr =
   error_if_negative (fun () -> C.nn_connect sock @@ Addr.connect_to_string addr)
-
-let connect_exn sock addr = connect sock addr |> CCError.get_exn
 
 let shutdown s e =
   CCError.map ignore @@
   error_if_notequal 0 (fun () -> C.nn_shutdown s e)
 
-let shutdown_exn s e = shutdown s e |> CCError.get_exn
-
 let close sock =
   CCError.map ignore @@
   error_if_notequal 0 (fun () -> C.nn_close sock)
-
-let close_exn sock = close sock |> CCError.get_exn
 
 (* getsockopt *)
 
