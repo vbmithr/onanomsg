@@ -4,20 +4,47 @@ open Async.Std
 open Nanomsg_utils
 open Nanomsg
 
-let ready sock io_event =
-  let f = match io_event with
-    | `Write -> send_fd
-    | `Read -> recv_fd
-  in
-  f sock |> function
-  | `Error _ -> return @@ `Bad_fd
-  | `Ok fd ->
-    let fd = Fd.create ~avoid_nonblock_if_possible:true
-        (Fd.Kind.Socket `Passive) fd
-        Info.(of_string "nanomsg pollfd") in
-    Fd.ready_to fd io_event
+type 'a async_socket = {
+  sock: socket;
+  sfd: Fd.t;
+  rfd: Fd.t;
+} [@@deriving create]
 
-let send_buf blitf lenf sock buf pos len =
+let of_socket_recv sock =
+  let open CCError in
+  recv_fd sock >>= fun rfd ->
+  let rfd =
+    Fd.create ~avoid_nonblock_if_possible:true
+      (Fd.Kind.Socket `Passive) rfd
+      Info.(of_string "nanomsg recv_fd") in
+  return @@ create_async_socket ~sock ~rfd ~sfd:(Fd.stderr ()) ()
+
+let of_socket_send sock =
+  let open CCError in
+  send_fd sock >>= fun sfd ->
+  let sfd =
+    Fd.create ~avoid_nonblock_if_possible:true
+      (Fd.Kind.Socket `Passive) sfd
+      Info.(of_string "nanomsg send_fd") in
+  return @@ create_async_socket ~sock ~rfd:(Fd.stdin ()) ~sfd ()
+
+let of_socket sock =
+  let open CCError in
+  recv_fd sock >>= fun rfd ->
+  send_fd sock >>= fun sfd ->
+  let rfd =
+    Fd.create ~avoid_nonblock_if_possible:true
+      (Fd.Kind.Socket `Passive) rfd
+      Info.(of_string "nanomsg recv_fd")
+  in
+  let sfd =
+    Fd.create ~avoid_nonblock_if_possible:true
+      (Fd.Kind.Socket `Passive) sfd
+      Info.(of_string "nanomsg send_fd")
+  in
+  return @@ create_async_socket ~sock ~rfd ~sfd ()
+
+let send_buf blitf lenf {sock; sfd; rfd} buf pos len =
   if pos < 0 || len < 0 || pos + len > lenf buf
   then return @@ CCError.fail ("Internal", "bounds")
   else
@@ -27,8 +54,8 @@ let send_buf blitf lenf sock buf pos len =
       let nn_buf_p = Ctypes.(allocate (ptr void) nn_buf) in
       let ba = Ctypes.(bigarray_of_ptr array1 len
                          Bigarray.char @@ from_voidp char nn_buf) in
-      blitf buf pos ba 0 len;
-      ready sock `Write >>| function
+      blitf ~src:buf ~src_pos:pos ~dst:ba ~dst_pos:0 ~len:len;
+      Fd.ready_to sfd `Write >>| function
       | `Bad_fd | `Closed -> CCError.fail ("Internal", "`Bad_fd | `Closed")
       | `Ready ->
         let _ =
@@ -37,8 +64,8 @@ let send_buf blitf lenf sock buf pos len =
             Symbol.(value_of_name_exn "NN_DONTWAIT") in
         CCError.return ()
 
-let send_bigstring_buf = send_buf CCBigstring.blit CCBigstring.size
-let send_bytes_buf = send_buf CCBigstring.blit_of_bytes Bytes.length
+let send_bigstring_buf = send_buf Bigstring.blit Bigstring.length
+let send_bytes_buf = send_buf Bigstring.From_string.blit Bytes.length
 
 let send_bigstring sock buf =
   send_bigstring_buf sock buf 0 @@ CCBigstring.size buf
@@ -52,10 +79,10 @@ let send_string_buf sock s pos len =
 let send_string sock s =
   send_bytes_buf sock (Bytes.unsafe_of_string s) 0 (String.length s)
 
-let recv sock f =
+let recv {sock; sfd; rfd} f =
   let open Ctypes in
   let ba_start_p = allocate (ptr void) null in
-  ready sock `Read >>= function
+  Fd.ready_to rfd `Read >>= function
   | `Bad_fd | `Closed ->
     return @@ CCError.fail ("Internal", "`Bad_fd | `Closed")
   | `Ready ->
