@@ -6,7 +6,7 @@ open Nanomsg
 exception Error of string * string
 
 type +'a socket = {
-  sock: Nanomsg.socket;
+  sock: 'a Nanomsg.socket;
   sfd: Lwt_unix.file_descr;
   rfd: Lwt_unix.file_descr;
 } constraint 'a = [< `Send | `Recv] [@@deriving create]
@@ -27,27 +27,27 @@ let fail () =
   let `Error (a, b) = error () in
   Lwt.fail @@ Error (a, b)
 
-let of_socket_recv sock =
-  wrap_error (recv_fd sock) >>= fun rfd ->
-  let rfd =
-    Lwt_unix.of_unix_file_descr ~blocking:false rfd in
-  Lwt.return @@ create_socket ~sock ~rfd ~sfd:(Lwt_unix.stderr) ()
-
-let of_socket_send sock =
-  wrap_error (send_fd sock) >>= fun sfd ->
-    let sfd =
-      Lwt_unix.of_unix_file_descr ~blocking:false sfd in
-    Lwt.return @@ create_socket ~sock ~rfd:(Lwt_unix.stdin) ~sfd ()
-
-let of_socket sock =
-  wrap_error (recv_fd sock) >>= fun rfd ->
-  wrap_error (send_fd sock) >>= fun sfd ->
-  let rfd = Lwt_unix.of_unix_file_descr ~blocking:false rfd in
-  let sfd = Lwt_unix.of_unix_file_descr ~blocking:false sfd in
-  Lwt.return @@ create_socket ~sock ~rfd ~sfd ()
+let of_socket : type t. t Nanomsg.socket -> t proto -> t socket =
+  fun sock proto -> match proto with
+    | Pair | Req | Rep | Surveyor | Respondant | Bus ->
+      wrap_error (recv_fd sock) >>= fun rfd ->
+      wrap_error (send_fd sock) >>= fun sfd ->
+      let rfd = Lwt_unix.of_unix_file_descr ~blocking:false rfd in
+      let sfd = Lwt_unix.of_unix_file_descr ~blocking:false sfd in
+      Lwt.return @@ create_socket ~sock ~rfd ~sfd ()
+    | Sub | Pull ->
+      wrap_error (recv_fd sock) >>= fun rfd ->
+      let rfd =
+        Lwt_unix.of_unix_file_descr ~blocking:false rfd in
+      Lwt.return @@ create_socket ~sock ~rfd ~sfd:(Lwt_unix.stderr) ()
+    | Pub | Push ->
+      wrap_error (send_fd sock) >>= fun sfd ->
+      let sfd =
+        Lwt_unix.of_unix_file_descr ~blocking:false sfd in
+      Lwt.return @@ create_socket ~sock ~rfd:(Lwt_unix.stdin) ~sfd ()
 
 let socket ?domain proto =
-  wrap_error @@ socket ?domain proto >>= of_socket
+  wrap_error @@ socket ?domain proto >>= fun sock -> of_socket sock proto
 
 let bind sock addr = wrap_error @@ bind sock.sock addr
 let connect sock addr = wrap_error @@ connect sock.sock addr

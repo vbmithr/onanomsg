@@ -5,7 +5,7 @@ open Nanomsg_utils
 open Nanomsg
 
 type +'a socket = {
-  sock: Nanomsg.socket;
+  sock: 'a Nanomsg.socket;
   sfd: Fd.t;
   rfd: Fd.t;
 } constraint 'a = [< `Send | `Recv] [@@deriving create]

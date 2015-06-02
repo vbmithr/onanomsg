@@ -4,16 +4,16 @@ open Nanomsg
 
 type +'a socket constraint 'a = [< `Send | `Recv]
 
-val socket : ?domain:domain -> proto -> ([`Send | `Recv] socket, error) CCError.t
+val socket : ?domain:domain -> ([< `Send | `Recv] as 'a) proto -> ('a socket, error) CCError.t
 val bind : [< `Send | `Recv] socket -> Addr.bind Addr.t -> (eid, error) CCError.t
 val connect : [< `Send | `Recv] socket -> Addr.connect Addr.t -> (eid, error) CCError.t
 val shutdown : [< `Send | `Recv] socket -> eid -> (unit, error) CCError.t
 val close : [< `Send | `Recv] socket -> (unit, error) CCError.t
 
-val nn_socket : [< `Send | `Recv] socket -> Nanomsg.socket
-val of_socket_send : Nanomsg.socket -> ([`Send] socket, error) CCError.t
-val of_socket_recv : Nanomsg.socket -> ([`Recv] socket, error) CCError.t
-val of_socket : Nanomsg.socket -> ([`Send | `Recv] socket, error) CCError.t
+val nn_socket : ([< `Send | `Recv] as 'a) socket -> 'a Nanomsg.socket
+val of_socket_send : [`Send] Nanomsg.socket -> ([`Send] socket, error) CCError.t
+val of_socket_recv : [`Recv] Nanomsg.socket -> ([`Recv] socket, error) CCError.t
+val of_socket : [`Send | `Recv] Nanomsg.socket -> ([`Send | `Recv] socket, error) CCError.t
 
 (** {1 Asynchronous I/O} *)
 

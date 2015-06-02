@@ -1,20 +1,45 @@
 open Nanomsg_utils
 
 type error = string * string
-type socket = int
+type +'a socket = int constraint 'a = [< `Send | `Recv]
 type domain = AF_SP [@value 1] | AF_SP_RAW [@@deriving enum]
-type proto =
-  | Pair [@value 16]
-  | Pub [@value 32]
-  | Sub [@value 33]
-  | Req [@value 48]
-  | Rep [@value 49]
-  | Push [@value 80]
-  | Pull [@value 81]
-  | Surveyor [@value 96]
-  | Respondant [@value 97]
-  | Bus [@value 112]
-      [@@deriving enum]
+
+type _ proto =
+  | Pair [@value 16] : [`Send | `Recv] proto
+  | Pub [@value 32] : [`Send] proto
+  | Sub [@value 33] : [`Recv] proto
+  | Req [@value 48] : [`Send | `Recv] proto
+  | Rep [@value 49] : [`Send | `Recv] proto
+  | Push [@value 80] : [`Send] proto
+  | Pull [@value 81] : [`Recv] proto
+  | Surveyor [@value 96] : [`Send | `Recv] proto
+  | Respondant [@value 97] : [`Send | `Recv] proto
+  | Bus [@value 112] : [`Send | `Recv] proto
+
+let proto_to_enum : type a. a proto -> int = function
+  | Pair -> 16
+  | Pub -> 32
+  | Sub -> 33
+  | Req -> 48
+  | Rep -> 49
+  | Push -> 80
+  | Pull -> 81
+  | Surveyor -> 96
+  | Respondant -> 97
+  | Bus -> 112
+
+let proto_of_enum = function
+  | 16 -> Some Pair
+  | 48 -> Some Req
+  | 49 -> Some Rep
+  | 96 -> Some Surveyor
+  | 97 -> Some Respondant
+  | 112 -> Some Bus
+  | 32 -> Some Pub
+  | 80 -> Some Push
+  | 33 -> Some Sub
+  | 81 -> Some Pull
+  | _ -> None
 
 module Addr = struct
   module V4 = struct
@@ -165,11 +190,7 @@ let domain sock =
   | None -> `Error ("Internal", "domain_of_enum")
 
 let proto sock =
-  let open CCError in
-  getsockopt_int sock "NN_SOL_SOCKET" "NN_PROTOCOL" >>= fun v ->
-  match proto_of_enum v with
-  | Some v -> `Ok v
-  | None -> `Error ("Internal", "proto_of_enum")
+  getsockopt_int sock "NN_SOL_SOCKET" "NN_PROTOCOL"
 
 let get_linger sock =
   CCError.map (fun n -> if n < 0 then `Inf else `Ms n) @@
