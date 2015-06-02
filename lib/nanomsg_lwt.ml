@@ -5,6 +5,12 @@ open Nanomsg
 
 exception Error of string * string
 
+type +'a socket = {
+  sock: Nanomsg.socket;
+  sfd: Lwt_unix.file_descr;
+  rfd: Lwt_unix.file_descr;
+} constraint 'a = [< `Send | `Recv] [@@deriving create]
+
 let wrap_error = function
   | `Error (name, descr) -> Lwt.fail @@ Error (name, descr)
   | `Ok a -> Lwt.return a
@@ -17,28 +23,40 @@ let map_error f = function
   | `Error (name, descr) -> Lwt.fail @@ Error (name, descr)
   | `Ok a -> Lwt.return (f a)
 
-let throw () =
-  let code = C.nn_errno () in
-  let err_string = C.nn_strerror code in
-  let err_value =
-    if code > 156384712
-    then Symbol.errvalue_of_errno_exn code
-    else "" in
-  Lwt.fail @@ Error (err_value, err_string)
+let fail () =
+  let `Error (a, b) = error () in
+  Lwt.fail @@ Error (a, b)
 
-let fail_if cond sock io_event f =
-    bind_error
-      (fun fd ->
-         Lwt_unix.(wrap_syscall io_event (of_unix_file_descr fd) f) >>= fun res ->
-         if cond res then throw () else Lwt.return res
-      )
-      (match io_event with
-       | Lwt_unix.Write -> send_fd sock
-       | Lwt_unix.Read -> recv_fd sock
-      )
+let of_socket_recv sock =
+  wrap_error (recv_fd sock) >>= fun rfd ->
+  let rfd =
+    Lwt_unix.of_unix_file_descr ~blocking:false rfd in
+  Lwt.return @@ create_socket ~sock ~rfd ~sfd:(Lwt_unix.stderr) ()
 
-let fail_negative = fail_if (fun x -> x < 0)
-let fail_notequal v = fail_if (fun x -> x <> v)
+let of_socket_send sock =
+  wrap_error (send_fd sock) >>= fun sfd ->
+    let sfd =
+      Lwt_unix.of_unix_file_descr ~blocking:false sfd in
+    Lwt.return @@ create_socket ~sock ~rfd:(Lwt_unix.stdin) ~sfd ()
+
+let of_socket sock =
+  wrap_error (recv_fd sock) >>= fun rfd ->
+  wrap_error (send_fd sock) >>= fun sfd ->
+  let rfd = Lwt_unix.of_unix_file_descr ~blocking:false rfd in
+  let sfd = Lwt_unix.of_unix_file_descr ~blocking:false sfd in
+  Lwt.return @@ create_socket ~sock ~rfd ~sfd ()
+
+let socket ?domain proto =
+  wrap_error @@ socket ?domain proto >>= of_socket
+
+let bind sock addr = wrap_error @@ bind sock.sock addr
+let connect sock addr = wrap_error @@ connect sock.sock addr
+let shutdown sock eid = wrap_error @@ shutdown sock.sock eid
+let close sock = wrap_error @@ close sock.sock
+let nn_socket sock = sock.sock
+
+let wait_read sock f = Lwt_unix.(wrap_syscall Read sock.rfd f)
+let wait_write sock f = Lwt_unix.(wrap_syscall Write sock.sfd f)
 
 let send_buf blitf lenf sock buf pos len =
   if pos < 0 || len < 0 || pos + len > lenf buf
@@ -46,17 +64,18 @@ let send_buf blitf lenf sock buf pos len =
   else
     let nn_buf = C.nn_allocmsg (Unsigned.Size_t.of_int len) 0 in
     match nn_buf with
-    | None -> throw ()
+    | None -> fail ()
     | Some nn_buf ->
       let nn_buf_p = Ctypes.(allocate (ptr void) nn_buf) in
       let ba = Ctypes.(bigarray_of_ptr array1 len
                          Bigarray.char @@ from_voidp char nn_buf) in
       blitf buf pos ba 0 len;
-      fail_notequal len sock Lwt_unix.Write
-        (fun () -> C.nn_send (Obj.magic sock : int)
+      wait_write sock
+        (fun () -> C.nn_send (Obj.magic sock.sock : int)
             nn_buf_p (Unsigned.Size_t.of_int (-1))
-            Symbol.(value_of_name_exn "NN_DONTWAIT")) >|= fun nb_written ->
-      ignore nb_written
+            Symbol.(value_of_name_exn "NN_DONTWAIT")) >>= fun nb_written ->
+      if nb_written <> len then fail ()
+      else Lwt.return_unit
 
 let send_bigstring_buf = send_buf CCBigstring.blit CCBigstring.size
 let send_bytes_buf = send_buf CCBigstring.blit_of_bytes Bytes.length
@@ -74,11 +93,10 @@ let send_string sock s =
   send_bytes_buf sock (Bytes.unsafe_of_string s) 0 (String.length s)
 
 let recv sock f =
-  let open Lwt_unix in
   let open Ctypes in
   let ba_start_p = allocate (ptr void) null in
-  fail_negative sock Lwt_unix.Read
-    (fun () -> C.nn_recv (Obj.magic sock : int)
+  wait_read sock
+    (fun () -> C.nn_recv (Obj.magic sock.sock : int)
         ba_start_p (Unsigned.Size_t.of_int (-1))
         Symbol.(value_of_name_exn "NN_DONTWAIT")) >>= fun nb_recv ->
   let ba_start = !@ ba_start_p in

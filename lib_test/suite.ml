@@ -132,25 +132,25 @@ let send_recv_fd_test () =
   get_exn @@ close sock
 
 let pair_test () =
-  let module E = CCError in
+  let open NB in
   let msgs = ["auie"; "uie,"; "yx.k"] in
   let addr = `Inproc "rdv_point" in
-  let peer1 = E.get_exn @@ socket Pair in
-  let peer2 = E.get_exn @@ socket Pair in
-  let _ = bind peer1 addr in
-  let _ = connect peer2 addr in
+  socket Pair >>= fun peer1 ->
+  socket Pair >>= fun peer2 ->
+  bind peer1 addr >>= fun _ ->
+  connect peer2 addr >>= fun _ ->
   Lwt_list.iter_s (fun msg ->
-      NB.send_string peer1 msg >>= fun () ->
-      NB.recv_string peer2 >>= fun recv_msg ->
-      assert_equal msg recv_msg; Lwt.return_unit
+      send_string peer1 msg >>= fun () ->
+      recv_string peer2 >|= fun recv_msg ->
+      assert_equal msg recv_msg
     ) msgs >>= fun () ->
   Lwt_list.iter_s (fun msg ->
-      NB.send_string peer2 msg >>= fun () ->
-      NB.recv_string peer1 >>= fun recv_msg ->
-      assert_equal msg recv_msg; Lwt.return_unit
-    ) msgs >|= fun () ->
-  E.get_exn @@ close peer1;
-  E.get_exn @@ close peer2
+      send_string peer2 msg >>= fun () ->
+      recv_string peer1 >|= fun recv_msg ->
+      assert_equal msg recv_msg
+    ) msgs >>= fun () ->
+  close peer1 >>= fun () ->
+  close peer2
 
 let reqrep_test () =
   let open CCError in
@@ -204,15 +204,14 @@ let pubsub_local_2subs_test () =
   assert_equal packet x2
 
 let tcp_pubsub_test () =
-  let open Nanomsg_lwt in
   let port = 56352 in
-  wrap_error @@ socket Pub >>= fun pub ->
-  wrap_error @@ socket Sub >>= fun sub ->
-  wrap_error @@ set_ipv4_only pub false >>= fun () ->
-  wrap_error @@ set_ipv4_only sub false >>= fun () ->
-  let _ = bind pub @@ `Tcp (`All, port) in
-  let _ = connect sub @@ `Tcp ((`V6 Ipaddr.V6.localhost, None), port) in
-  wrap_error @@ Nanomsg.subscribe sub "" >>= fun () ->
+  NB.socket Pub >>= fun pub ->
+  NB.socket Sub >>= fun sub ->
+  let _ = set_ipv4_only (NB.nn_socket pub) false in
+  let _ = set_ipv4_only (NB.nn_socket sub) false in
+  let _ = NB.bind pub @@ `Tcp (`All, port) in
+  let _ = NB.connect sub @@ `Tcp ((`V6 Ipaddr.V6.localhost, None), port) in
+  let _ = Nanomsg.subscribe (NB.nn_socket sub) "" in
   let msg = "bleh" in
   let len = String.length msg in
   let recv_msg = Bytes.create @@ String.length msg in
@@ -234,23 +233,22 @@ let tcp_pubsub_test () =
 
   (* NB.send_bytes *)
   let th = NB.send_bytes pub recv_msg in
-  NB.recv_bytes_buf sub recv_msg' 0 >|= fun nb_recv ->
+  NB.recv_bytes_buf sub recv_msg' 0 >>= fun nb_recv ->
   assert_equal nb_recv len;
   assert_equal (Lwt.Return ()) (Lwt.state th);
   assert_equal recv_msg recv_msg';
 
-  CCError.get_exn @@ close pub;
-  CCError.get_exn @@ close sub
+  NB.close pub >>= fun () ->
+  NB.close sub
 
 let pipeline_local_test () =
-  let open Nanomsg_lwt in
   let msgs = [|"foo"; "bar"; "baz"|] in
   let receiver addr =
-    wrap_error @@ socket Pull >>= fun s ->
-    wrap_error @@ bind s addr >>= fun _ ->
+    NB.socket Pull >>= fun s ->
+    NB.bind s addr >>= fun _ ->
     let rec inner n =
       if n > 2
-      then wrap_error @@ close s
+      then NB.close s
       else
         NB.recv_string s >>= fun m ->
         (assert_equal msgs.(n) m; inner (succ n))
@@ -258,10 +256,10 @@ let pipeline_local_test () =
     inner 0
   in
   let sender addr =
-    wrap_error @@ socket Push >>= fun s ->
-    wrap_error @@ connect s addr >>= fun _ ->
+    NB.socket Push >>= fun s ->
+    NB.connect s addr >>= fun _ ->
     Lwt_list.iter_s (NB.send_string s) @@ Array.to_list msgs >>= fun () ->
-    Lwt_unix.yield () >>= fun () -> wrap_error @@ close s
+    Lwt_unix.yield () >>= fun () -> NB.close s
   in
   Lwt.join
     [
