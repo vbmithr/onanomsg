@@ -4,11 +4,11 @@ open Async.Std
 open Nanomsg_utils
 open Nanomsg
 
-type 'a async_socket = {
-  sock: socket;
+type +'a socket = {
+  sock: Nanomsg.socket;
   sfd: Fd.t;
   rfd: Fd.t;
-} [@@deriving create]
+} constraint 'a = [< `Send | `Recv] [@@deriving create]
 
 let of_socket_recv sock =
   let open CCError in
@@ -17,7 +17,7 @@ let of_socket_recv sock =
     Fd.create ~avoid_nonblock_if_possible:true
       (Fd.Kind.Socket `Passive) rfd
       Info.(of_string "nanomsg recv_fd") in
-  return @@ create_async_socket ~sock ~rfd ~sfd:(Fd.stderr ()) ()
+  return @@ create_socket ~sock ~rfd ~sfd:(Fd.stderr ()) ()
 
 let of_socket_send sock =
   let open CCError in
@@ -26,7 +26,7 @@ let of_socket_send sock =
     Fd.create ~avoid_nonblock_if_possible:true
       (Fd.Kind.Socket `Passive) sfd
       Info.(of_string "nanomsg send_fd") in
-  return @@ create_async_socket ~sock ~rfd:(Fd.stdin ()) ~sfd ()
+  return @@ create_socket ~sock ~rfd:(Fd.stdin ()) ~sfd ()
 
 let of_socket sock =
   let open CCError in
@@ -42,7 +42,16 @@ let of_socket sock =
       (Fd.Kind.Socket `Passive) sfd
       Info.(of_string "nanomsg send_fd")
   in
-  return @@ create_async_socket ~sock ~rfd ~sfd ()
+  return @@ create_socket ~sock ~rfd ~sfd ()
+
+let socket ?domain proto =
+  CCError.(socket ?domain proto >>= of_socket)
+
+let bind sock addr = bind sock.sock addr
+let connect sock addr = connect sock.sock addr
+let shutdown sock eid = shutdown sock.sock eid
+let close sock = close sock.sock
+let nn_socket sock = sock.sock
 
 let send_buf blitf lenf {sock; sfd; rfd} buf pos len =
   if pos < 0 || len < 0 || pos + len > lenf buf
