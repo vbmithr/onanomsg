@@ -266,22 +266,22 @@ let tcp_pubsub_test () =
   (* NB.send_string *)
   let th = send_string pub msg in
   recv_string sub >>= fun str ->
-  (* assert_equal (Lwt.Return ()) (Lwt.state th); *)
-  (* assert_equal msg str; *)
+  assert_equal (Lwt.Return ()) (Lwt.state th);
+  assert_equal msg str;
 
-  (* (\* NB.send_string_buf *\) *)
-  (* let th = send_string_buf pub msg 0 len in *)
-  (* recv_bytes_buf sub recv_msg 0 >>= fun nb_recv -> *)
-  (* assert_equal nb_recv len; *)
-  (* assert_equal (Lwt.Return ()) (Lwt.state th); *)
-  (* assert_equal msg (Bytes.unsafe_to_string recv_msg); *)
+  (* NB.send_string_buf *)
+  let th = send_string_buf pub msg 0 len in
+  recv_bytes_buf sub recv_msg 0 >>= fun nb_recv ->
+  assert_equal nb_recv len;
+  assert_equal (Lwt.Return ()) (Lwt.state th);
+  assert_equal msg (Bytes.unsafe_to_string recv_msg);
 
-  (* (\* NB.send_bytes *\) *)
-  (* let th = send_bytes pub recv_msg in *)
-  (* recv_bytes_buf sub recv_msg' 0 >>= fun nb_recv -> *)
-  (* assert_equal nb_recv len; *)
-  (* assert_equal (Lwt.Return ()) (Lwt.state th); *)
-  (* assert_equal recv_msg recv_msg'; *)
+  (* NB.send_bytes *)
+  let th = send_bytes pub recv_msg in
+  recv_bytes_buf sub recv_msg' 0 >>= fun nb_recv ->
+  assert_equal nb_recv len;
+  assert_equal (Lwt.Return ()) (Lwt.state th);
+  assert_equal recv_msg recv_msg';
 
   close pub >>= fun () ->
   close sub
