@@ -10,43 +10,41 @@ type +'a socket = {
   rfd: Fd.t;
 } constraint 'a = [< `Send | `Recv] [@@deriving create]
 
-let memoize_fd f =
-  let ht = Int.Table.create () in
-  fun v ->
-    let v : int = Obj.magic v in
-    Hashtbl.find ht v |> function
-    | Some res -> res
-    | None ->
-      let res = f v in
-      Hashtbl.replace ht v res;
-      res
+let fd_create_memo_passive =
+  Memo.general ~hashable:Core.Std.Unix.File_descr.hashable
+    (fun fd ->
+       Fd.create ~avoid_nonblock_if_possible:true
+         (Fd.Kind.Socket `Passive) fd
+         Info.(of_string "nanomsg recv_fd")
+    )
 
-let fd_create_memo = memoize_fd
-    (fun v ->
-       let v : Core.Std.Unix.File_descr.t = Obj.magic v in
-       (
-         Printf.printf "BLEH\n%!";
-         Fd.create ~avoid_nonblock_if_possible:true
-          (Fd.Kind.Socket `Passive)) v
-         Info.(of_string "nanomsg recv_fd"))
+let fd_create_memo_active =
+  Memo.general ~hashable:Core.Std.Unix.File_descr.hashable
+    (fun fd ->
+       Fd.create ~avoid_nonblock_if_possible:true
+         (Fd.Kind.Socket `Active) fd
+         Info.(of_string "nanomsg send_fd")
+    )
 
 let of_socket_ro sock =
   let open CCError in
-  recv_fd sock >>= fun rfd ->
-  let rfd = fd_create_memo rfd in
-  return @@ create_socket ~sock ~rfd ~sfd:(Fd.stderr ()) ()
+  recv_fd sock >|= fun rfd ->
+  let rfd = fd_create_memo_passive rfd in
+  create_socket ~sock ~rfd ~sfd:(Fd.stderr ()) ()
 
 let of_socket_wo sock =
   let open CCError in
-  send_fd sock >>= fun sfd ->
-  let sfd = fd_create_memo sfd in
-  return @@ create_socket ~sock ~rfd:(Fd.stdin ()) ~sfd ()
+  send_fd sock >|= fun sfd ->
+  let sfd = fd_create_memo_active sfd in
+  create_socket ~sock ~rfd:(Fd.stdin ()) ~sfd ()
 
 let of_socket_rw sock =
   let open CCError in
-  recv_fd sock >>= fun fd ->
-  let fd = fd_create_memo fd in
-  return @@ create_socket ~sock ~rfd:fd ~sfd:fd ()
+  recv_fd sock >>= fun rfd ->
+  send_fd sock >|= fun sfd ->
+  let rfd = fd_create_memo_passive rfd in
+  let sfd = fd_create_memo_active sfd in
+  create_socket ~sock ~rfd ~sfd ()
 
 let socket_ro ?domain proto = CCError.(socket_ro ?domain proto >>= of_socket_ro)
 let socket_wo ?domain proto = CCError.(socket_wo ?domain proto >>= of_socket_wo)

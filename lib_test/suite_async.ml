@@ -83,9 +83,9 @@ let run_async_test test_f () =
 
 let test_suite =
   [
-    (* "async_socket", `Quick, async_socket; *)
+    "async_socket", `Quick, async_socket;
     "pair", `Quick, run_async_test pair_test;
-    (* "ipc_pubsub", `Quick, run_async_test ipc_pubsub_test; *)
+    "ipc_pubsub", `Quick, run_async_test ipc_pubsub_test;
   ]
 
 let main () =
