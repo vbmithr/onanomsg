@@ -79,15 +79,15 @@ let send_buf blitf lenf sock buf pos len =
       wait_write sock
         (fun () -> C.nn_send (Obj.magic sock.sock : int)
             nn_buf_p (Unsigned.Size_t.of_int (-1))
-            Symbol.(value_of_name_exn "NN_DONTWAIT")) >>= fun nb_written ->
-      if nb_written <> len then fail ()
-      else Lwt.return_unit
+            Symbol.(value_of_name_exn "NN_DONTWAIT")) >>= function
+      | nb_written when nb_written <> len -> fail ()
+      | _ -> Lwt.return_unit
 
-let send_bigstring_buf = send_buf CCBigstring.blit CCBigstring.size
+let send_bigstring_buf = send_buf CCBigstring.blit CCBigstring.length
 let send_bytes_buf = send_buf CCBigstring.blit_of_bytes Bytes.length
 
 let send_bigstring sock buf =
-  send_bigstring_buf sock buf 0 @@ CCBigstring.size buf
+  send_bigstring_buf sock buf 0 @@ CCBigstring.length buf
 
 let send_bytes sock b =
   send_bytes_buf sock b 0 (Bytes.length b)
@@ -104,28 +104,31 @@ let recv sock f =
   wait_read sock
     (fun () -> C.nn_recv (Obj.magic sock.sock : int)
         ba_start_p (Unsigned.Size_t.of_int (-1))
-        Symbol.(value_of_name_exn "NN_DONTWAIT")) >>= fun nb_recv ->
-  let ba_start = !@ ba_start_p in
-  let ba = bigarray_of_ptr array1 nb_recv
-      Bigarray.char (from_voidp char ba_start) in
-  f ba >|= fun res ->
-  let (_:int) = C.nn_freemsg ba_start in
-  res
+        Symbol.(value_of_name_exn "NN_DONTWAIT")) >>= function
+  | -1 -> fail ()
+  | nb_recv ->
+    let ba_start = !@ ba_start_p in
+    let ba = bigarray_of_ptr array1 4 (* nb_recv *)
+        Bigarray.char (from_voidp char ba_start) in
+    f ba >|= fun res ->
+    let (_:int) = C.nn_freemsg ba_start in
+    res
 
 let recv_bytes_buf sock buf pos =
   recv sock (fun ba ->
-      let len = CCBigstring.size ba in
+      let len = CCBigstring.length ba in
       CCBigstring.blit_to_bytes ba 0 buf pos len;
       Lwt.return len
     )
 
 let recv_bytes sock =
   recv sock (fun ba ->
-      let len = CCBigstring.size ba in
+      let len = CCBigstring.length ba in
       let buf = Bytes.create len in
       CCBigstring.blit_to_bytes ba 0 buf 0 len;
       Lwt.return buf
     )
 
-let recv_string sock = recv_bytes sock >|= Bytes.unsafe_to_string
+let recv_string sock =
+  recv_bytes sock >|= Bytes.unsafe_to_string
 

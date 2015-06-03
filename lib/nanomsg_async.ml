@@ -70,17 +70,17 @@ let send_buf blitf lenf {sock; sfd; rfd} buf pos len =
       Fd.ready_to sfd `Write >>| function
       | `Bad_fd | `Closed -> CCError.fail ("Internal", "`Bad_fd | `Closed")
       | `Ready ->
-        let _ =
-          C.nn_send (Obj.magic sock : int)
-            nn_buf_p (Unsigned.Size_t.of_int (-1))
-            Symbol.(value_of_name_exn "NN_DONTWAIT") in
-        CCError.return ()
+        C.nn_send (Obj.magic sock : int)
+          nn_buf_p (Unsigned.Size_t.of_int (-1))
+          Symbol.(value_of_name_exn "NN_DONTWAIT") |> function
+        | nb_sent when nb_sent <> len -> error ()
+        | _ -> CCError.return ()
 
 let send_bigstring_buf = send_buf Bigstring.blit Bigstring.length
 let send_bytes_buf = send_buf Bigstring.From_string.blit Bytes.length
 
 let send_bigstring sock buf =
-  send_bigstring_buf sock buf 0 @@ CCBigstring.size buf
+  send_bigstring_buf sock buf 0 @@ CCBigstring.length buf
 
 let send_bytes sock b =
   send_bytes_buf sock b 0 (Bytes.length b)
@@ -98,26 +98,28 @@ let recv {sock; sfd; rfd} f =
   | `Bad_fd | `Closed ->
     return @@ CCError.fail ("Internal", "`Bad_fd | `Closed")
   | `Ready ->
-    let nb_recv = C.nn_recv (Obj.magic sock : int)
-        ba_start_p (Unsigned.Size_t.of_int (-1))
-        Symbol.(value_of_name_exn "NN_DONTWAIT") in
-    let ba_start = !@ ba_start_p in
-    let ba = bigarray_of_ptr array1 nb_recv
-        Bigarray.char (from_voidp char ba_start) in
-    f ba >>| fun res ->
-    let (_:int) = C.nn_freemsg ba_start in
-    CCError.return res
+    C.nn_recv (Obj.magic sock : int)
+      ba_start_p (Unsigned.Size_t.of_int (-1))
+      Symbol.(value_of_name_exn "NN_DONTWAIT") |> function
+    | -1 -> return @@ error ()
+    | nb_recv ->
+      let ba_start = !@ ba_start_p in
+      let ba = bigarray_of_ptr array1 nb_recv
+          Bigarray.char (from_voidp char ba_start) in
+      f ba >>| fun res ->
+      CCError.(error_if_negative
+                 (fun () -> C.nn_freemsg ba_start) >|= fun _ -> res)
 
 let recv_bytes_buf sock buf pos =
   recv sock (fun ba ->
-      let len = CCBigstring.size ba in
+      let len = CCBigstring.length ba in
       CCBigstring.blit_to_bytes ba 0 buf pos len;
       return len
     )
 
 let recv_bytes sock =
   recv sock (fun ba ->
-      let len = CCBigstring.size ba in
+      let len = CCBigstring.length ba in
       let buf = Bytes.create len in
       CCBigstring.blit_to_bytes ba 0 buf 0 len;
       return buf
