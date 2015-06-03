@@ -30,20 +30,20 @@ let fail () =
 let of_socket_ro sock =
   wrap_error (recv_fd sock) >|= fun rfd ->
   let rfd =
-    Lwt_unix.of_unix_file_descr ~blocking:false rfd in
+    Lwt_unix.of_unix_file_descr ~blocking:true rfd in
   create_socket ~sock ~rfd ~sfd:(Lwt_unix.stderr) ()
 
 let of_socket_wo sock =
   wrap_error (send_fd sock) >|= fun sfd ->
   let sfd =
-    Lwt_unix.of_unix_file_descr ~blocking:false sfd in
+    Lwt_unix.of_unix_file_descr ~blocking:true sfd in
   create_socket ~sock ~rfd:(Lwt_unix.stdin) ~sfd ()
 
 let of_socket_rw sock =
   wrap_error (recv_fd sock) >>= fun rfd ->
   wrap_error (send_fd sock) >|= fun sfd ->
-  let rfd = Lwt_unix.of_unix_file_descr ~blocking:false rfd in
-  let sfd = Lwt_unix.of_unix_file_descr ~blocking:false sfd in
+  let rfd = Lwt_unix.of_unix_file_descr ~blocking:true rfd in
+  let sfd = Lwt_unix.of_unix_file_descr ~blocking:true sfd in
   create_socket ~sock ~rfd ~sfd ()
 
 let socket_ro ?domain proto =

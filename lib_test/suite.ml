@@ -4,8 +4,6 @@ open OUnit
 open Nanomsg
 module NB = Nanomsg_lwt
 
-let ths = ref []
-
 let bind_addr_test () =
   let open Addr in
   assert_equal (`Inproc "9786/+-auieauie7658%=`!!")
@@ -256,7 +254,7 @@ let tcp_pubsub_test () =
   let _ = set_ipv4_only (nn_socket sub) false in
   let _ = bind pub @@ `Tcp (`All, port) in
   let _ = connect sub @@ `Tcp ((`V6 Ipaddr.V6.localhost, None), port) in
-  let _ = Nanomsg.subscribe (nn_socket sub) "" in
+  let _ = subscribe (nn_socket sub) "" in
   let msg = "bleh" in
   let len = String.length msg in
   let recv_msg = Bytes.create @@ String.length msg in
@@ -312,9 +310,7 @@ let pipeline_local_test () =
       receiver (`Inproc "rdvpoint")
     ]
 
-let run_lwt_test test_f () =
-  let th = test_f () in
-  ths := th :: !ths
+let run_lwt_test test_f () = Lwt_main.run @@ test_f ()
 
 let test_suite =
   [
@@ -330,11 +326,11 @@ let test_suite =
     "pubsub_local", `Quick, (fun () -> CCError.get_exn @@ pubsub_local_test ());
     "pubsub_local_2subs", `Quick, (fun () -> CCError.get_exn @@ pubsub_local_2subs_test ());
     "tcp_pubsub", `Quick, run_lwt_test tcp_pubsub_test;
-    (* "pipeline_local", `Quick, run_lwt_test pipeline_local_test; *)
+    "pipeline_local", `Quick, run_lwt_test pipeline_local_test;
+    "lwt_fail", `Quick, run_lwt_test (fun () -> Lwt.fail_with "Bleh")
   ]
 
 let () =
   Alcotest.run "ONanomsg test suite" [
     "test_suite", test_suite;
   ];
-  Lwt_main.run @@ Lwt.join !ths
