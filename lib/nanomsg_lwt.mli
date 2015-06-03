@@ -6,14 +6,20 @@ val map_error : ('a -> 'b) -> ('a, error) CCError.t -> 'b Lwt.t
 
 type +'a socket constraint 'a = [< `Send | `Recv]
 
-val socket : ?domain:domain -> ([< `Send | `Recv] as 'a) proto -> 'a socket Lwt.t
+val of_socket_ro : [`Recv] Nanomsg.socket -> [`Recv] socket Lwt.t
+val of_socket_wo : [`Send] Nanomsg.socket -> [`Send] socket Lwt.t
+val of_socket_rw : [`Send | `Recv] Nanomsg.socket -> [`Send | `Recv] socket Lwt.t
+
+val socket_ro : ?domain:domain -> [`Recv] proto -> [`Recv] socket Lwt.t
+val socket_wo : ?domain:domain -> [`Send] proto -> [`Send] socket Lwt.t
+val socket_rw : ?domain:domain -> [`Send | `Recv] proto -> [`Send | `Recv] socket Lwt.t
+
+val nn_socket : ([< `Send | `Recv] as 'a) socket -> 'a Nanomsg.socket
+
 val bind : [< `Send | `Recv] socket -> Addr.bind Addr.t -> eid Lwt.t
 val connect : [< `Send | `Recv] socket -> Addr.connect Addr.t -> eid Lwt.t
 val shutdown : [< `Send | `Recv] socket -> eid -> unit Lwt.t
 val close : [< `Send | `Recv] socket -> unit Lwt.t
-
-val nn_socket : ([< `Send | `Recv] as 'a) socket -> 'a Nanomsg.socket
-val of_socket : ([< `Send | `Recv] as 'a) Nanomsg.socket -> 'a socket Lwt.t
 
 (** {1 Asynchronous I/O} *)
 

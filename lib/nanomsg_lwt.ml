@@ -27,27 +27,33 @@ let fail () =
   let `Error (a, b) = error () in
   Lwt.fail @@ Error (a, b)
 
-let of_socket : type t. t Nanomsg.socket -> t proto -> t socket =
-  fun sock proto -> match proto with
-    | Pair | Req | Rep | Surveyor | Respondant | Bus ->
-      wrap_error (recv_fd sock) >>= fun rfd ->
-      wrap_error (send_fd sock) >>= fun sfd ->
-      let rfd = Lwt_unix.of_unix_file_descr ~blocking:false rfd in
-      let sfd = Lwt_unix.of_unix_file_descr ~blocking:false sfd in
-      Lwt.return @@ create_socket ~sock ~rfd ~sfd ()
-    | Sub | Pull ->
-      wrap_error (recv_fd sock) >>= fun rfd ->
-      let rfd =
-        Lwt_unix.of_unix_file_descr ~blocking:false rfd in
-      Lwt.return @@ create_socket ~sock ~rfd ~sfd:(Lwt_unix.stderr) ()
-    | Pub | Push ->
-      wrap_error (send_fd sock) >>= fun sfd ->
-      let sfd =
-        Lwt_unix.of_unix_file_descr ~blocking:false sfd in
-      Lwt.return @@ create_socket ~sock ~rfd:(Lwt_unix.stdin) ~sfd ()
+let of_socket_ro sock =
+  wrap_error (recv_fd sock) >|= fun rfd ->
+  let rfd =
+    Lwt_unix.of_unix_file_descr ~blocking:false rfd in
+  create_socket ~sock ~rfd ~sfd:(Lwt_unix.stderr) ()
 
-let socket ?domain proto =
-  wrap_error @@ socket ?domain proto >>= fun sock -> of_socket sock proto
+let of_socket_wo sock =
+  wrap_error (send_fd sock) >|= fun sfd ->
+  let sfd =
+    Lwt_unix.of_unix_file_descr ~blocking:false sfd in
+  create_socket ~sock ~rfd:(Lwt_unix.stdin) ~sfd ()
+
+let of_socket_rw sock =
+  wrap_error (recv_fd sock) >>= fun rfd ->
+  wrap_error (send_fd sock) >|= fun sfd ->
+  let rfd = Lwt_unix.of_unix_file_descr ~blocking:false rfd in
+  let sfd = Lwt_unix.of_unix_file_descr ~blocking:false sfd in
+  create_socket ~sock ~rfd ~sfd ()
+
+let socket_ro ?domain proto =
+  wrap_error @@ socket_ro ?domain proto >>= fun sock -> of_socket_ro sock
+
+let socket_wo ?domain proto =
+  wrap_error @@ socket_wo ?domain proto >>= fun sock -> of_socket_wo sock
+
+let socket_rw ?domain proto =
+  wrap_error @@ socket_rw ?domain proto >>= fun sock -> of_socket_rw sock
 
 let bind sock addr = wrap_error @@ bind sock.sock addr
 let connect sock addr = wrap_error @@ connect sock.sock addr

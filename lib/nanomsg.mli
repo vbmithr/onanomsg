@@ -3,7 +3,7 @@ type domain = AF_SP | AF_SP_RAW
 type _ proto =
   | Pair : [`Send | `Recv] proto
   | Pub : [`Send] proto
-  | Sub: [`Recv] proto
+  | Sub : [`Recv] proto
   | Req : [`Send | `Recv] proto
   | Rep : [`Send | `Recv] proto
   | Push : [`Send] proto
@@ -12,7 +12,11 @@ type _ proto =
   | Respondant : [`Send | `Recv] proto
   | Bus : [`Send | `Recv] proto
 
-type +'a socket constraint 'a = [< `Send | `Recv]
+val proto_ro_to_enum : [`Recv] proto -> int
+val proto_wo_to_enum : [`Send] proto -> int
+val proto_rw_to_enum : [`Send | `Recv] proto -> int
+
+type +'a socket = int constraint 'a = [< `Send | `Recv]
 
 module Addr : sig
   type bind = [
@@ -45,7 +49,10 @@ type eid
 
 (** {1 Socket management } *)
 type error = string * string
-val socket : ?domain:domain -> ([< `Send | `Recv] as 'a) proto -> ('a socket, error) CCError.t
+val socket_ro : ?domain:domain -> [`Recv] proto -> ([`Recv] socket, error) CCError.t
+val socket_wo : ?domain:domain -> [`Send] proto -> ([`Send] socket, error) CCError.t
+val socket_rw : ?domain:domain -> [`Recv | `Send] proto -> ([`Recv | `Send] socket, error) CCError.t
+
 val bind : [< `Send | `Recv] socket -> Addr.bind Addr.t -> (eid, error) CCError.t
 val connect : [< `Send | `Recv] socket -> Addr.connect Addr.t -> (eid, error) CCError.t
 val shutdown : [< `Send | `Recv] socket -> eid -> (unit, error) CCError.t
@@ -76,7 +83,7 @@ val recv_bytes_buf :?block:bool -> [> `Recv] socket -> Bytes.t -> int -> (int, e
 (** {1 Get socket options} *)
 
 val domain : [< `Send | `Recv] socket -> (domain, error) CCError.t
-val proto : ([< `Send | `Recv] as 'a) socket -> ('a proto, error) CCError.t
+val proto_int : [< `Send | `Recv] socket -> (int, error) CCError.t
 val send_fd : [< `Send | `Recv] socket -> (Unix.file_descr, error) CCError.t
 val recv_fd : [< `Send | `Recv] socket -> (Unix.file_descr, error) CCError.t
 

@@ -1,45 +1,38 @@
 open Nanomsg_utils
 
 type error = string * string
-type +'a socket = int constraint 'a = [< `Send | `Recv]
+
 type domain = AF_SP [@value 1] | AF_SP_RAW [@@deriving enum]
 
 type _ proto =
-  | Pair [@value 16] : [`Send | `Recv] proto
-  | Pub [@value 32] : [`Send] proto
-  | Sub [@value 33] : [`Recv] proto
-  | Req [@value 48] : [`Send | `Recv] proto
-  | Rep [@value 49] : [`Send | `Recv] proto
-  | Push [@value 80] : [`Send] proto
-  | Pull [@value 81] : [`Recv] proto
-  | Surveyor [@value 96] : [`Send | `Recv] proto
-  | Respondant [@value 97] : [`Send | `Recv] proto
-  | Bus [@value 112] : [`Send | `Recv] proto
+  | Pair : [`Send | `Recv] proto
+  | Pub : [`Send] proto
+  | Sub : [`Recv] proto
+  | Req : [`Send | `Recv] proto
+  | Rep : [`Send | `Recv] proto
+  | Push : [`Send] proto
+  | Pull : [`Recv] proto
+  | Surveyor : [`Send | `Recv] proto
+  | Respondant : [`Send | `Recv] proto
+  | Bus : [`Send | `Recv] proto
 
-let proto_to_enum : type a. a proto -> int = function
-  | Pair -> 16
-  | Pub -> 32
+let proto_ro_to_enum = function
   | Sub -> 33
+  | Pull -> 81
+
+let proto_wo_to_enum = function
+  | Pub -> 32
+  | Push -> 80
+
+let proto_rw_to_enum = function
+  | Pair -> 16
   | Req -> 48
   | Rep -> 49
-  | Push -> 80
-  | Pull -> 81
   | Surveyor -> 96
   | Respondant -> 97
   | Bus -> 112
 
-let proto_of_enum = function
-  | 16 -> Some Pair
-  | 48 -> Some Req
-  | 49 -> Some Rep
-  | 96 -> Some Surveyor
-  | 97 -> Some Respondant
-  | 112 -> Some Bus
-  | 32 -> Some Pub
-  | 80 -> Some Push
-  | 33 -> Some Sub
-  | 81 -> Some Pull
-  | _ -> None
+type +'a socket = int constraint 'a = [< `Send | `Recv]
 
 module Addr = struct
   module V4 = struct
@@ -148,9 +141,17 @@ end
 
 type eid = int
 
-let socket ?(domain=AF_SP) proto =
+let socket_ro ?(domain=AF_SP) proto =
   error_if_negative (fun () ->
-      C.nn_socket (domain_to_enum domain) (proto_to_enum proto))
+      C.nn_socket (domain_to_enum domain) (proto_ro_to_enum proto))
+
+let socket_wo ?(domain=AF_SP) proto =
+  error_if_negative (fun () ->
+      C.nn_socket (domain_to_enum domain) (proto_wo_to_enum proto))
+
+let socket_rw ?(domain=AF_SP) proto =
+  error_if_negative (fun () ->
+      C.nn_socket (domain_to_enum domain) (proto_rw_to_enum proto))
 
 let bind sock addr =
   error_if_negative (fun () -> C.nn_bind sock @@ Addr.bind_to_string addr)
@@ -189,7 +190,7 @@ let domain sock =
   | Some v -> `Ok v
   | None -> `Error ("Internal", "domain_of_enum")
 
-let proto sock =
+let proto_int sock =
   getsockopt_int sock "NN_SOL_SOCKET" "NN_PROTOCOL"
 
 let get_linger sock =
