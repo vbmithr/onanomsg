@@ -77,7 +77,7 @@ let send_buf blitf lenf sock buf pos len =
                          Bigarray.char @@ from_voidp char nn_buf) in
       blitf buf pos ba 0 len;
       wait_write sock
-        (fun () -> C.nn_send (Obj.magic sock.sock : int)
+        (fun () -> C.nn_send sock.sock
             nn_buf_p (Unsigned.Size_t.of_int (-1))
             Symbol.(value_of_name_exn "NN_DONTWAIT")) >>= function
       | nb_written when nb_written <> len -> fail ()
@@ -102,7 +102,7 @@ let recv sock f =
   let open Ctypes in
   let ba_start_p = allocate (ptr void) null in
   wait_read sock
-    (fun () -> C.nn_recv (Obj.magic sock.sock : int)
+    (fun () -> C.nn_recv sock.sock
         ba_start_p (Unsigned.Size_t.of_int (-1))
         Symbol.(value_of_name_exn "NN_DONTWAIT")) >>= function
   | -1 -> fail ()

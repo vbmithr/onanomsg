@@ -9,6 +9,7 @@ PKG containers
 PKG containers.bigarray
 PKG ppx_deriving.std
 PKG async
+PKG threads
 
 S lib
 S lib_gen
@@ -18,3 +19,4 @@ S examples
 B _build/lib
 B _build/lib_gen
 B _build/lib_test
+B +threads
