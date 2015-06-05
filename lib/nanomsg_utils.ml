@@ -63,6 +63,14 @@ let error () =
     else string_of_int code in
   `Error (err_value, err_string)
 
+let or_fail = function
+  | `Error (err_value, err_string) -> failwith (err_value ^ ": " ^ err_string)
+  | `Ok v -> v
+
+let error_exn () =
+  error () |> function `Error (err_value, err_string) ->
+    Failure (err_value ^ ": " ^ err_string)
+
 let maybe_error cond f =
   let res = f () in
   if cond res then error () else `Ok res
@@ -71,7 +79,13 @@ let maybe_error_ign cond f =
   let res = f () in
   if cond res then error () else `Ok ()
 
+let maybe_fail cond f =
+  let res = f () in
+  if cond res then raise @@ error_exn () else res
+
 let error_if_negative = maybe_error (fun x -> x < 0)
 let error_if_notequal v = maybe_error (fun x -> x <> v)
 let error_if_negative_ign = maybe_error_ign (fun x -> x < 0)
 let error_if_notequal_ign v = maybe_error_ign (fun x -> x <> v)
+let fail_if_negative = maybe_fail (fun x -> x < 0)
+let fail_if_notequal v = maybe_fail (fun x -> x <> v)
